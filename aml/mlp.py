@@ -12,6 +12,10 @@ from .acsf import format_combine_ACSFs, generate_radial_angular_default
 from .data import atomic_numbers
 from .io import from_file, to_file
 from .utilities import prepare_command_mpi
+from .slurm import * 
+
+import os
+import configparser
 
 
 class MLP:
@@ -186,6 +190,7 @@ class MLPProcess(MLP):
         i_directories = iter(directories)
 
         # loop over members in a structured way - batches of tasks to run
+        print('training started')
         for i_batch in range(self.n_batch):
 
             # launch all tasks in this batch
@@ -201,7 +206,7 @@ class MLPProcess(MLP):
                 if task.returncode != 0:
                     print(f'Command finished with a non-zero return code: {task.returncode:d}')
                     print(task)
-
+        print('training done')
         # read resulting model parameters
         self._read_parameters(directories)
 
@@ -366,7 +371,7 @@ class N2P2(MLPProcess):
             # we have a node size, prepare to run on multiple nodes
             # MPI command expects a rankfile in the working directory
             node_size = int(node_size)
-            mode = 'OpenMPI-multi'
+            mode = 'MPI'
         self.mode = mode
         self.node_size = node_size
         self.n_core_task = n_core_task
@@ -488,20 +493,39 @@ class N2P2(MLPProcess):
             i_task:
             directory:
         """
-
         # prepare MPI launch command
         details = False
-        cmd_mpi = prepare_command_mpi(
-            i_task,
-            n_core_task=self.n_core_task,
-            node_size=self.node_size,
-            mode=self.mode,
-            details=details,
-            fn_rank=directory / 'rankfile.txt'
-        )
 
-        # launch the task
-        cmd = self.template_cmd[operation].format(cmd_mpi=cmd_mpi).strip()
-        task = Popen(cmd, cwd=directory, shell=True)
+        if os.path.isfile('slurm.ini'):
+           t= configparser.ConfigParser()
+           t.read('slurm.ini')
+           s = t['SLURM']
 
-        return task
+           cmd_mpi = prepare_command_mpi(
+               i_task,
+               n_core_task=int(s['nodes'])*int(s['mpis_per_node'])//int(s['cores_per_mpi']),
+               node_size=s['nodes'],
+               mode='Slurm',
+               details=details,
+               fn_rank=directory / 'rankfile.txt'
+           )
+           cmd = self.template_cmd[operation].format(cmd_mpi=cmd_mpi).strip()
+           task = sbatch(nodes=s['nodes'],mpis_per_node=s['mpis_per_node'],
+			constraint=s['constraint'],jobfile=s['name'],
+                        cmd = cmd,workdir=directory,time=s['time'],pre=s['preamble'])
+           task.run()
+           return task
+        else:
+           cmd_mpi = prepare_command_mpi(
+              i_task,
+              n_core_task=self.n_core_task,
+              node_size=self.node_size,
+              mode=self.mode,
+              details=details,
+              fn_rank=directory / 'rankfile.txt'
+           )
+
+           # launch the task
+           cmd = self.template_cmd[operation].format(cmd_mpi=cmd_mpi).strip()
+           task = Popen(cmd, cwd=directory, shell=True)
+           return task

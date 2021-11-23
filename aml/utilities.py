@@ -133,7 +133,7 @@ def prepare_command_mpi(
         cmd_mpi = f'mpirun --np {n_core_task:d} --bind-to core --rankfile rankfile.txt'
 
     elif mode == 'Slurm':
-        raise NotImplementedError('Slurm support not implemented.')
+        cmd_mpi = f'srun'
 
     else:
         raise ValueError(f'Unrecognized mode: {mode:s}')
