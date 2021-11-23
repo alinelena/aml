@@ -152,6 +152,7 @@ class sbatch:
 	def __str__(self):
 		a ='#!/usr/bin/env bash'
 		a += '\n#SBATCH --job-name="{}"'.format(self.name)
+		a += '\n#SBATCH --exclusive'
 		a += "\n#SBATCH --nodes={}".format(self.nodes)
 		a += '\n#SBATCH -t {}'.format(self.time)
 		if self.constraint is not None:
